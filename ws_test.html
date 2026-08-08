@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+    <title>
+        Digital Twin WMS
+    </title>
+
+    <style>
+
+        body {
+
+            font-family: Arial;
+
+            background: #f4f4f4;
+
+            padding: 20px;
+        }
+
+        h1 {
+
+            margin-bottom: 10px;
+        }
+
+        h2 {
+
+            margin-top: 40px;
+        }
+
+        /* =========================================
+           RACK SECTION
+        ========================================= */
+
+        #rack-container {
+
+            display: grid;
+
+            grid-template-columns:
+                repeat(4, 1fr);
+
+            gap: 20px;
+
+            margin-bottom: 50px;
+        }
+
+        .rack {
+
+            border-radius: 12px;
+
+            padding: 20px;
+
+            color: white;
+
+            min-height: 120px;
+
+            box-shadow:
+                0 2px 8px
+                rgba(0,0,0,0.2);
+
+            transition: 0.3s;
+        }
+
+        .rack h2 {
+
+            margin: 0;
+        }
+
+        .green {
+
+            background: #27ae60;
+        }
+
+        .orange {
+
+            background: #f39c12;
+        }
+
+        .red {
+
+            background: #c0392b;
+        }
+
+        /* =========================================
+           TASK SECTION
+        ========================================= */
+
+        #task-container {
+
+            display: grid;
+
+            grid-template-columns:
+                repeat(3, 1fr);
+
+            gap: 20px;
+        }
+
+        .task-card {
+
+            background: white;
+
+            border-radius: 10px;
+
+            padding: 15px;
+
+            box-shadow:
+                0 2px 8px
+                rgba(0,0,0,0.1);
+
+            transition: 0.3s;
+        }
+
+        .task-card h3 {
+
+            margin-top: 0;
+        }
+
+        .waiting {
+
+            border-left:
+                10px solid #f1c40f;
+        }
+
+        .assigned {
+
+            border-left:
+                10px solid #3498db;
+        }
+
+        .in_progress {
+
+            border-left:
+                10px solid #9b59b6;
+        }
+
+        .completed {
+
+            border-left:
+                10px solid #2ecc71;
+        }
+
+        /* =========================================
+   WAREHOUSE MAP
+========================================= */
+
+        #warehouse-map {
+
+            position: relative;
+
+            width: 1000px;
+
+            height: 600px;
+
+            background: white;
+
+            border: 2px solid #333;
+
+            margin-top: 40px;
+
+            overflow: hidden;
+        }
+
+        .rack-map {
+
+            position: absolute;
+
+            width: 120px;
+
+            height: 80px;
+
+            background: #34495e;
+
+            color: white;
+
+            display: flex;
+
+            align-items: center;
+
+            justify-content: center;
+
+            border-radius: 10px;
+
+            font-weight: bold;
+        }
+
+        .forklift {
+
+            position: absolute;
+
+            width: 60px;
+
+            height: 60px;
+
+            background: orange;
+
+            border-radius: 50%;
+
+            display: flex;
+
+            align-items: center;
+
+            justify-content: center;
+
+            font-size: 30px;
+
+            transition: all 0.5s ease;
+
+            z-index: 999;
+        }
+
+    </style>
+
+</head>
+
+<body>
+
+    <h1>
+        Realtime Digital Twin WMS
+    </h1>
+
+    <!-- =========================================
+         TASK MONITOR
+    ========================================= -->
+
+    <h2>
+        Realtime Warehouse Tasks
+    </h2>
+
+    <div id="task-container"></div>
+
+    <h2>
+    Warehouse Digital Twin
+    </h2>
+
+    <div id="warehouse-map">
+
+        <!-- RACKS -->
+
+        <div
+            class="rack-map"
+            style="
+                left:100px;
+                top:100px;
+            "
+        >
+            RK-001
+        </div>
+
+        <div
+            class="rack-map"
+            style="
+                left:300px;
+                top:100px;
+            "
+        >
+            RK-002
+        </div>
+
+        <div
+            class="rack-map"
+            style="
+                left:100px;
+                top:300px;
+            "
+        >
+            RK-003
+        </div>
+
+        <div
+            class="rack-map"
+            style="
+                left:300px;
+                top:300px;
+            "
+        >
+            RK-004
+        </div>
+
+    </div>
+
+    <!-- =========================================
+         RACK MONITOR
+    ========================================= -->
+
+    <h2>
+        Rack Occupancy
+    </h2>
+
+    <div id="rack-container"></div>
+
+    <script>
+
+        const ws =
+           new WebSocket(
+  `ws://localhost:8002/ws/${warehouseId}/${userId}`
+)
+
+        const tasks = {};
+
+        ws.onopen = () => {
+
+            console.log(
+                "WEBSOCKET CONNECTED"
+            );
+        };
+
+        ws.onmessage = (event) => {
+
+            const data =
+                JSON.parse(event.data);
+
+            console.log(
+                "EVENT:",
+                data
+            );
+
+            // =====================================
+            // FORKLIFT EVENT
+            // =====================================
+
+            if (
+                data.event_type ===
+                "forklift.position.updated"
+            ) {
+
+                handleForkliftMovement(data);
+            }
+
+            // =====================================
+            // TASK EVENT
+            // =====================================
+
+            if (
+                data.event_type &&
+                data.event_type.startsWith(
+                    "warehouse.task"
+                )
+            ) {
+
+                handleTaskEvent(data);
+            }
+
+            // =====================================
+            // RACK OCCUPANCY EVENT
+            // =====================================
+
+            if (
+                data.event_type ===
+                "rack.occupancy.updated"
+            ) {
+
+                handleRackOccupancy(data);
+            }
+        };
+
+        // =========================================
+        // TASK EVENT HANDLER
+        // =========================================
+
+        function handleTaskEvent(data) {
+
+            const taskCode =
+                data.task_code;
+
+            if (!tasks[taskCode]) {
+
+                tasks[taskCode] = {
+
+                    task_code:
+                        taskCode,
+
+                    task_type:
+                        data.task_type || "-",
+
+                    status:
+                        data.status || "WAITING",
+
+                    operator:
+                        data.operator || "-"
+                };
+            }
+
+            tasks[taskCode].status =
+                data.status ||
+                tasks[taskCode].status;
+
+            if (data.operator) {
+
+                tasks[taskCode].operator =
+                    data.operator;
+            }
+
+            renderTasks();
+        }
+
+        // =========================================
+        // RENDER TASKS
+        // =========================================
+
+        function renderTasks() {
+
+            const container =
+                document.getElementById(
+                    "task-container"
+                );
+
+            container.innerHTML = "";
+
+            Object.values(tasks).forEach(task => {
+
+                const div =
+                    document.createElement(
+                        "div"
+                    );
+
+                const statusClass =
+                    task.status.toLowerCase();
+
+                div.className =
+                    `task-card ${statusClass}`;
+
+                div.innerHTML = `
+
+                    <h3>
+                        ${task.task_code}
+                    </h3>
+
+                    <p>
+                        <b>Type:</b>
+                        ${task.task_type}
+                    </p>
+
+                    <p>
+                        <b>Status:</b>
+                        ${task.status}
+                    </p>
+
+                    <p>
+                        <b>Operator:</b>
+                        ${task.operator}
+                    </p>
+                `;
+
+                container.appendChild(div);
+            });
+        }
+
+        // =========================================
+        // RACK OCCUPANCY HANDLER
+        // =========================================
+
+        function handleRackOccupancy(data) {
+
+            let rack =
+                document.getElementById(
+                    data.rack_code
+                );
+
+            // CREATE CARD
+
+            if (!rack) {
+
+                rack =
+                    document.createElement(
+                        "div"
+                    );
+
+                rack.id =
+                    data.rack_code;
+
+                rack.classList.add(
+                    "rack"
+                );
+
+                document
+                    .getElementById(
+                        "rack-container"
+                    )
+                    .appendChild(
+                        rack
+                    );
+            }
+
+            // COLOR
+
+            rack.classList.remove(
+                "green",
+                "orange",
+                "red"
+            );
+
+            let color = "green";
+
+            if (
+                data.occupancy_percent >= 50
+            ) {
+
+                color = "orange";
+            }
+
+            if (
+                data.occupancy_percent >= 80
+            ) {
+
+                color = "red";
+            }
+
+            rack.classList.add(color);
+
+            // CONTENT
+
+            rack.innerHTML = `
+
+                <h2>
+                    ${data.rack_code}
+                </h2>
+
+                <p>
+                    Warehouse:
+                    ${data.warehouse_code}
+                </p>
+
+                <p>
+                    Used:
+                    ${data.used}
+                </p>
+
+                <p>
+                    Capacity:
+                    ${data.capacity}
+                </p>
+
+                <h3>
+                    ${data.occupancy_percent}%
+                </h3>
+            `;
+        }
+
+        // =========================================
+        // FORKLIFT MOVEMENT
+        // =========================================
+
+        function handleForkliftMovement(data) {
+
+            let forklift =
+                document.getElementById(
+                    data.forklift_code
+                );
+
+            // CREATE FORKLIFT
+
+            if (!forklift) {
+
+                forklift =
+                    document.createElement(
+                        "div"
+                    );
+
+                forklift.id =
+                    data.forklift_code;
+
+                forklift.classList.add(
+                    "forklift"
+                );
+
+                forklift.innerHTML = "🚜";
+
+                document
+                    .getElementById(
+                        "warehouse-map"
+                    )
+                    .appendChild(
+                        forklift
+                    );
+            }
+
+            // MOVE
+
+            forklift.style.left =
+                data.x_position + "px";
+
+            forklift.style.top =
+                data.y_position + "px";
+
+            // TOOLTIP
+
+            forklift.title = `
+                ${data.forklift_code}
+
+                Operator:
+                ${data.operator_name}
+
+                Status:
+                ${data.status}
+            `;
+        }
+
+        // =========================================
+        // ERROR HANDLER
+        // =========================================
+
+        ws.onerror = (err) => {
+
+            console.log(
+                "WEBSOCKET ERROR",
+                err
+            );
+        };
+
+        // =========================================
+        // CLOSE HANDLER
+        // =========================================
+
+        ws.onclose = () => {
+
+            console.log(
+                "WEBSOCKET CLOSED"
+            );
+        };
+
+    </script>
+
+</body>
+
+</html>

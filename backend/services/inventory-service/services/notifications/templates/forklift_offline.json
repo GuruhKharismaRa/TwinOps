@@ -1,0 +1,11 @@
+{
+  "code": "FORKLIFT_OFFLINE",
+
+  "severity": "CRITICAL",
+
+  "title": "Forklift Offline",
+
+  "message": "{{forklift_code}} disconnected",
+
+  "url": "/forklift"
+}

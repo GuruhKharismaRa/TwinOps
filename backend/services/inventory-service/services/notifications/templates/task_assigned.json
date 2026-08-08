@@ -1,0 +1,11 @@
+{
+  "code": "TASK_ASSIGNED",
+
+  "severity": "INFO",
+
+  "title": "New Task Assigned",
+
+  "message": "{{task_no}} assigned to you",
+
+  "url": "/tasks"
+}

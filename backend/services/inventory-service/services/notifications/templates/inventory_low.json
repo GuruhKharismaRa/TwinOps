@@ -1,0 +1,11 @@
+{
+  "code": "INVENTORY_LOW",
+
+  "severity": "WARNING",
+
+  "title": "Low Inventory Alert",
+
+  "message": "{{sku}} below minimum stock",
+
+  "url": "/inventory"
+}
